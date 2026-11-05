@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo Lecteur Ceb : une page à coin plié, quelques lignes de texte et un marque-page ambré. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M39,29 L61,29 L72,40 L72,76 Q72,79 69,79 L39,79 Q36,79 36,76 L36,32 Q36,29 39,29 Z" />
+    <path
+        android:fillColor="#C9DCE2"
+        android:pathData="M61,29 L61,37 Q61,40 64,40 L72,40 Z" />
+    <path
+        android:pathData="M42.5,51 L65.5,51 M42.5,58 L65.5,58 M42.5,65 L65.5,65 M42.5,72 L57,72"
+        android:strokeWidth="3"
+        android:strokeColor="#AFC3CA"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2B134"
+        android:pathData="M42,29 L49,29 L49,44 L45.5,40.5 L42,44 Z" />
+</vector>
