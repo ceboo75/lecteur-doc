@@ -1,0 +1,100 @@
+name: Compiler l'APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      # Clé de signature : secret GitHub si présent, sinon clé générée une fois et conservée en cache.
+      - name: Restaurer la clé de signature
+        uses: actions/cache/restore@v4
+        with:
+          path: signing
+          key: signing-keystore-v1
+
+      - name: Préparer la clé de signature
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          SECRET_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > signing/release.keystore
+            printf '%s' "$SECRET_PASSWORD" > signing/password.txt
+          elif [ ! -f signing/release.keystore ]; then
+            openssl rand -hex 16 | tr -d '\n' > signing/password.txt
+            keytool -genkeypair -keystore signing/release.keystore -storetype PKCS12 \
+              -alias lecteurceb -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass:file signing/password.txt -keypass:file signing/password.txt \
+              -dname "CN=Lecteur Ceb, O=Ceb, C=FR"
+            echo "NEW_KEY=true" >> "$GITHUB_ENV"
+          fi
+          chmod 600 signing/password.txt
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/release.keystore" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD_FILE=$GITHUB_WORKSPACE/signing/password.txt" >> "$GITHUB_ENV"
+
+      - name: Sauvegarder la clé de signature
+        if: ${{ env.NEW_KEY == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: signing
+          key: signing-keystore-v1
+
+      - name: Compiler
+        shell: bash
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: gradle assembleRelease --no-daemon --console=plain 2>&1 | tee build.log
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/release/app-release.apk "LecteurCeb-1.0.${{ github.run_number }}.apk"
+
+      - name: Publier la version
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Lecteur Ceb 1.0.${{ github.run_number }}
+          body: "Touchez le fichier .apk ci-dessous depuis votre téléphone pour l'installer."
+          files: LecteurCeb-1.0.${{ github.run_number }}.apk
+          make_latest: true
+
+      - name: Signaler l'échec
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Compilation n°${{ github.run_number }} (commit ${GITHUB_SHA::7})"
+            echo
+            echo '```'
+            if [ -f build.log ]; then
+              grep -E "^e: |error:|What went wrong|FAILURE|Could not" -A4 build.log | head -150
+              echo "----- fin du journal -----"
+              tail -40 build.log
+            else
+              echo "Échec avant la compilation (voir l'onglet Actions)."
+            fi
+            echo '```'
+          } > body.md
+          gh issue create --title "Échec de compilation n°${{ github.run_number }}" --body-file body.md
